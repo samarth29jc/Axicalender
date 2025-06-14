@@ -25,6 +25,11 @@ const Calendar = () => {
   const timeFormatRefStart = useRef(null);
   const timeFormatRefEnd = useRef(null);
 
+  const [showYearOptionsLeft, setShowYearOptionsLeft] = useState(false);
+  const [showYearOptionsRight, setShowYearOptionsRight] = useState(false);
+  const yearDropdownRefLeft = useRef(null);
+  const yearDropdownRefRight = useRef(null);
+
   const [leftMonth, setLeftMonth] = useState(dateRange.startDate.getMonth());
   const [leftYear, setLeftYear] = useState(dateRange.startDate.getFullYear());
   const [rightMonth, setRightMonth] = useState(() => {
@@ -49,6 +54,13 @@ const Calendar = () => {
       }
       if (timeFormatRefEnd.current && !timeFormatRefEnd.current.contains(event.target)) {
         setShowTimeFormatOptionsEnd(false);
+      }
+      // Close year dropdowns if clicked outside
+      if (yearDropdownRefLeft.current && !yearDropdownRefLeft.current.contains(event.target)) {
+        setShowYearOptionsLeft(false);
+      }
+      if (yearDropdownRefRight.current && !yearDropdownRefRight.current.contains(event.target)) {
+        setShowYearOptionsRight(false);
       }
     };
 
@@ -235,53 +247,47 @@ const Calendar = () => {
     });
   };
 
-  const handleTimeFormatChange = (is24Hour) => {
+  const handleTimeFormatChange = (is24Hour, isStart) => {
     setIs24HourFormat(is24Hour);
-    setShowTimeFormatOptionsStart(false);
-    setShowTimeFormatOptionsEnd(false);
     
     // Update time values when switching format
     setDateRange(prev => {
-      const updateTime = (time) => {
-        if (is24Hour) {
-          // Convert to 24-hour format
-          let hours = time.hours;
-          if (time.ampm === 'PM' && hours !== 12) {
-            hours = hours + 12;
-          } else if (time.ampm === 'AM' && hours === 12) {
-            hours = 0;
-          }
-          return {
-            hours: hours,
-            minutes: 59,
-            seconds: 59,
-            ampm: time.ampm
-          };
-        } else {
-          // Convert to 12-hour format
-          let hours = time.hours;
-          let ampm = 'AM';
-          if (hours >= 12) {
-            ampm = 'PM';
-            hours = hours === 12 ? 12 : hours - 12;
-          } else if (hours === 0) {
-            hours = 12;
-          }
-          return {
-            hours: hours,
-            minutes: time.minutes,
-            seconds: time.seconds,
-            ampm: ampm
-          };
-        }
+      const now = new Date();
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+      const currentSeconds = now.getSeconds();
+      const currentAmpm = currentHours >= 12 ? 'PM' : 'AM';
+      const formattedHours = (currentHours % 12) || 12; // Convert 24hr to 12hr format
+
+      // Set start time to 12:00:00
+      const startTime = {
+        hours: is24Hour ? 12 : 12,
+        minutes: 0,
+        seconds: 0,
+        ampm: 'AM'
+      };
+
+      // Set end time to current time
+      const endTime = {
+        hours: is24Hour ? currentHours : formattedHours,
+        minutes: currentMinutes,
+        seconds: currentSeconds,
+        ampm: currentAmpm
       };
 
       return {
         ...prev,
-        startTime: updateTime(prev.startTime),
-        endTime: updateTime(prev.endTime)
+        startTime: startTime,
+        endTime: endTime
       };
     });
+
+    // Close the appropriate dropdown
+    if (isStart) {
+      setShowTimeFormatOptionsStart(false);
+    } else {
+      setShowTimeFormatOptionsEnd(false);
+    }
   };
 
   const renderCalendar = (month, year, isLeft) => {
@@ -358,6 +364,10 @@ const Calendar = () => {
     const timeFormatRef = isLeft ? timeFormatRefStart : timeFormatRefEnd;
     const setShowTimeFormatOptions = isLeft ? setShowTimeFormatOptionsStart : setShowTimeFormatOptionsEnd;
 
+    const showYearOptions = isLeft ? showYearOptionsLeft : showYearOptionsRight;
+    const setShowYearOptions = isLeft ? setShowYearOptionsLeft : setShowYearOptionsRight;
+    const yearDropdownRef = isLeft ? yearDropdownRefLeft : yearDropdownRefRight;
+
     return (
       <div className="calendar-container">
         {/* Header */}
@@ -391,34 +401,42 @@ const Calendar = () => {
             </select>
             <div className="dropdown-arrow">▼</div>
           </div>
-          <div className="dropdown-container">
-            <select
-              value={year}
-              onChange={(e) => {
-                const newYear = parseInt(e.target.value);
-                if (isLeft) {
-                  setLeftYear(newYear);
-                  // If left year/month becomes same as right year/month, move right month forward
-                  if (newYear === rightYear && leftMonth === rightMonth) {
-                    setRightMonth(prevMonth => (prevMonth === 11 ? 0 : prevMonth + 1));
-                    if (rightMonth === 11) setRightYear(prevYear => prevYear + 1);
-                  }
-                } else {
-                  setRightYear(newYear);
-                  // If right year/month becomes same as left year/month, move left month backward
-                  if (newYear === leftYear && rightMonth === leftMonth) {
-                    setLeftMonth(prevMonth => (prevMonth === 0 ? 11 : prevMonth - 1));
-                    if (leftMonth === 0) setLeftYear(prevYear => prevYear - 1);
-                  }
-                }
-              }}
-              className="year-select"
-            >
-              {Array.from({ length: new Date().getFullYear() - (new Date().getFullYear() - 10) + 1 }, (_, i) => new Date().getFullYear() - 10 + i).map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-            <div className="dropdown-arrow">▼</div>
+          <div className="dropdown-container" ref={yearDropdownRef}>
+            <div className="year-select" onClick={() => setShowYearOptions(prev => !prev)}>
+              {year}
+              <div className="dropdown-arrow">▼</div>
+            </div>
+            {showYearOptions && (
+              <div className="custom-year-options">
+                {Array.from(
+                  { length: 2026 }, // Number of years from 0 to 2025 (2025 - 0 + 1)
+                  (_, i) => i // Generates years from 0 to 2025
+                ).map(y => (
+                  <div 
+                    key={y} 
+                    className="custom-year-option" 
+                    onClick={() => {
+                      if (isLeft) {
+                        setLeftYear(y);
+                        if (y === rightYear && leftMonth === rightMonth) {
+                          setRightMonth(prevMonth => (prevMonth === 11 ? 0 : prevMonth + 1));
+                          if (rightMonth === 11) setRightYear(prevYear => prevYear + 1);
+                        }
+                      } else {
+                        setRightYear(y);
+                        if (y === leftYear && rightMonth === leftMonth) {
+                          setLeftMonth(prevMonth => (prevMonth === 0 ? 11 : prevMonth - 1));
+                          if (leftMonth === 0) setLeftYear(prevYear => prevYear - 1);
+                        }
+                      }
+                      setShowYearOptions(false);
+                    }}
+                  >
+                    {y}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -448,7 +466,7 @@ const Calendar = () => {
               <div className="time-inputs">
                 <input
                   type="number"
-                  value={String(is24HourFormat ? currentTime.hours : (currentTime.hours === 0 ? 12 : currentTime.hours > 12 ? currentTime.hours - 12 : currentTime.hours))}
+                  value={String(is24HourFormat ? currentTime.hours : (currentTime.hours === 0 ? 12 : currentTime.hours > 12 ? currentTime.hours - 12 : currentTime.hours)).padStart(2, '0')}
                   onChange={(e) => handleTimeChange('hours', e.target.value, isLeft)}
                   className="time-input"
                   min={is24HourFormat ? "0" : "1"}
@@ -499,8 +517,36 @@ const Calendar = () => {
                   
                   {showTimeFormatOptions && (
                     <div ref={timeFormatRef} className="time-format-options">
-                      <div onClick={() => handleTimeFormatChange(false)} className={!is24HourFormat ? 'active' : ''}>12h</div>
-                      <div onClick={() => handleTimeFormatChange(true)} className={is24HourFormat ? 'active' : ''}>24h</div>
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIs24HourFormat(false);
+                          if (isLeft) {
+                            setShowTimeFormatOptionsStart(false);
+                          } else {
+                            setShowTimeFormatOptionsEnd(false);
+                          }
+                          handleTimeFormatChange(false, isLeft);
+                        }} 
+                        className={!is24HourFormat ? 'active' : ''}
+                      >
+                        12h
+                      </div>
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIs24HourFormat(true);
+                          if (isLeft) {
+                            setShowTimeFormatOptionsStart(false);
+                          } else {
+                            setShowTimeFormatOptionsEnd(false);
+                          }
+                          handleTimeFormatChange(true, isLeft);
+                        }} 
+                        className={is24HourFormat ? 'active' : ''}
+                      >
+                        24h
+                      </div>
                     </div>
                   )}
                 </div>
@@ -567,9 +613,9 @@ const Calendar = () => {
             <div ref={calendarRef} className="calendar-popup">
               {/* Header */}
               <div className="popup-header">
-                <div className="date-range-display">
+                {/* <div className="date-range-display">
                   Start date <strong>{formatDate(dateRange.startDate)}</strong> → End date <strong>{formatDate(dateRange.endDate)}</strong>
-                </div>
+                </div> */}
                 <div className="popup-actions">
                 <button className="apply-button clear-button">Apply</button>
                   <button onClick={clearDates} className="clear-button">
